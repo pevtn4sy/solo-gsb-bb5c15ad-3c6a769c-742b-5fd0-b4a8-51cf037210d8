@@ -1,0 +1,14 @@
+{
+  "name": "annotation-migrator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "文稿批注迁移工具：将旧稿批注按上下文重新定位到新稿",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

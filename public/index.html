@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文稿批注迁移工具</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>文稿批注迁移工具</h1>
+    <div class="doc-bar">
+      <select id="docSelect"></select>
+      <button id="btnNewDoc">新建文稿</button>
+      <button id="btnDeleteDoc" class="danger">删除文稿</button>
+      <span id="saveHint" class="hint"></span>
+    </div>
+  </header>
+
+  <main id="emptyState" class="empty hidden">← 点击「新建文稿」开始，或从上方选择已有文稿</main>
+
+  <main id="workspace" class="hidden">
+    <section class="panel">
+      <h2>① 旧稿与批注
+        <span class="hint">粘贴旧版文稿并保存，然后在下方文稿中框选文字即可写批注</span>
+      </h2>
+      <textarea id="oldInput" rows="6" placeholder="粘贴旧版文稿……"></textarea>
+      <div class="row">
+        <button id="btnSaveOld">保存旧稿</button>
+        <span id="oldMsg" class="hint"></span>
+      </div>
+      <div id="oldView" class="doc-view" title="框选文字以添加批注"></div>
+    </section>
+
+    <div id="annotForm" class="annot-form hidden">
+      <div class="quote" id="annotQuote"></div>
+      <textarea id="annotComment" rows="2" placeholder="写下批注……"></textarea>
+      <div class="row">
+        <button id="btnAddAnnot">添加批注</button>
+        <button id="btnCancelAnnot" class="ghost">取消</button>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h2>批注列表 <span id="annotCount" class="hint"></span></h2>
+      <div id="annotList"></div>
+    </section>
+
+    <section class="panel">
+      <h2>② 新稿
+        <span class="hint">粘贴新版文稿，保存后系统按「选中文本 + 前后文」自动迁移批注</span>
+      </h2>
+      <textarea id="newInput" rows="6" placeholder="粘贴新版文稿……"></textarea>
+      <div class="row">
+        <button id="btnSaveNewMigrate">保存新稿并迁移批注</button>
+        <button id="btnRemigrate" class="ghost">重新迁移</button>
+        <span id="migrateMsg" class="hint"></span>
+      </div>
+    </section>
+
+    <section class="panel" id="resultPanel">
+      <h2>③ 迁移结果
+        <span class="hint">
+          <span class="dot dot-matched"></span>已定位
+          <span class="dot dot-manual"></span>人工指定
+          <span class="dot dot-pending"></span>待处理（需人工确认，系统不会猜测挂载）
+          <span class="dot dot-overlap"></span>重叠（点击可逐条查看）
+        </span>
+      </h2>
+      <div id="reviewSummary" class="review-summary"></div>
+      <div id="manualBanner" class="manual-banner hidden">
+        正在为批注「<span id="manualQuote"></span>」手动定位：请在左侧新稿中框选对应文字。
+        <button id="btnCancelManual" class="ghost">取消</button>
+      </div>
+      <div id="overlapPanel" class="overlap-panel hidden">
+        <h3>⚠ 批注重叠复核 <span id="overlapCount" class="hint"></span></h3>
+        <div id="overlapList"></div>
+      </div>
+      <div class="result-grid">
+        <div id="newView" class="doc-view"></div>
+        <div id="resultList"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
