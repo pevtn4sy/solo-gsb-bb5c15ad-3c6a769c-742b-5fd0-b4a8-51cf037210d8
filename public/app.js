@@ -6,6 +6,7 @@ const state = {
   pendingSel: null, // 旧稿中待添加批注的选区 {start, end}
   manualFor: null, // 正在手动定位的批注 id
   reviewEditing: new Set(), // 正在编辑复核结论的批注 id
+  handoff: null, // 导入预览中的交接包与逐条结果 { pkg, preview }
 };
 
 // ---------- 工具 ----------
@@ -17,7 +18,11 @@ async function api(method, url, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error || `请求失败 (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -124,6 +129,7 @@ async function loadDoc(id) {
   state.pendingSel = null;
   state.manualFor = null;
   state.reviewEditing = new Set();
+  closeHandoffModal();
   $('emptyState').classList.add('hidden');
   $('workspace').classList.remove('hidden');
   $('annotForm').classList.add('hidden');
@@ -525,6 +531,201 @@ async function migrate() {
   toast(msg);
 }
 
+// ---------- 复核结论离线交接 ----------
+
+const HANDOFF_OUTCOME_LABEL = {
+  importable: { text: '可导入', cls: 'ho-importable' },
+  conflict: { text: '冲突·待选择', cls: 'ho-conflict' },
+  identical: { text: '一致·无需导入', cls: 'ho-identical' },
+};
+const HANDOFF_SKIP_REASON = {
+  missing_annotation: '当前文稿中不存在该批注（缺失，跳过）',
+  binding_mismatch: '绑定与当前新稿、批注或位置不符（跳过）',
+  malformed: '交接记录不完整（跳过）',
+};
+
+function reviewSideHtml(side) {
+  if (!side || !side.decision) return '<span class="hint">（无有效结论）</span>';
+  const badge = `<span class="badge badge-review-${side.decision}">${REVIEW_LABEL[side.decision] || side.decision}</span>`;
+  const at = side.at ? `<span class="hint">签收时间：${fmtTime(side.at)}</span>` : '';
+  return `${badge} ${at}${side.note ? `<div class="handoff-note">📝 ${escapeHtml(side.note)}</div>` : ''}`;
+}
+
+function bindingLine(b) {
+  if (!b) return '';
+  return `<div class="hint">绑定：状态 ${b.status}｜区间 [${b.newStart}, ${b.newEnd})｜新稿摘要 ${String(b.newTextHash).slice(0, 10)}…</div>`;
+}
+
+function renderHandoffPreview() {
+  const { pkg, preview } = state.handoff;
+  const { counts, items } = preview;
+  $('handoffInfo').innerHTML =
+    `来源文稿：${escapeHtml(pkg.title || pkg.docId)}（ID ${escapeHtml(pkg.docId)}）` +
+    `｜导出时间：${fmtTime(pkg.exportedAt)}｜共 ${pkg.items.length} 条记录` +
+    (pkg.docId === state.doc.id ? '' : ' <b class="ho-error">注意：交接包文稿 ID 与当前文稿不同</b>');
+  $('handoffStats').innerHTML =
+    `<span class="ho-tag ho-importable">可导入 ${counts.importable}</span>` +
+    `<span class="ho-tag ho-conflict">冲突 ${counts.conflict}</span>` +
+    `<span class="ho-tag ho-identical">一致 ${counts.identical}</span>` +
+    `<span class="ho-tag ho-skipped">跳过 ${counts.skipped}</span>`;
+
+  $('handoffItems').innerHTML = items
+    .map((row) => {
+      const headQuote = row.quote
+        ? `<div class="quote">${escapeHtml(row.quote)}</div>`
+        : `<div class="hint">批注 ID：${escapeHtml(row.annotationId)}</div>`;
+      const comment = row.comment ? `<div class="comment">${escapeHtml(row.comment)}</div>` : '';
+      if (row.outcome === 'skipped') {
+        return `
+          <div class="handoff-item ho-row-skipped">
+            <div class="ho-row-head">
+              <span class="ho-tag ho-skipped">跳过</span>
+              <span class="hint">${HANDOFF_SKIP_REASON[row.reason] || row.reason}</span>
+            </div>
+            ${headQuote}${comment}
+            <div class="ho-sides">
+              <div class="ho-side"><b>交接包</b>${reviewSideHtml(row.incoming)}${bindingLine(row.incoming && row.incoming.binding)}</div>
+              <div class="ho-side"><b>当前</b>${reviewSideHtml(row.current)}${bindingLine(row.current && row.current.binding)}</div>
+            </div>
+          </div>`;
+      }
+      const meta = HANDOFF_OUTCOME_LABEL[row.outcome];
+      let action = '';
+      if (row.outcome === 'importable') {
+        action = `
+          <label class="ho-choice"><input type="checkbox" data-handoff-pick="${row.annotationId}" checked> 导入这条结论</label>`;
+      } else if (row.outcome === 'conflict') {
+        action = `
+          <div class="ho-conflict-choices" data-conflict="${row.annotationId}">
+            <label><input type="radio" name="ho-${row.annotationId}" data-conflict-choice="${row.annotationId}" value="local"> 保留本地</label>
+            <label><input type="radio" name="ho-${row.annotationId}" data-conflict-choice="${row.annotationId}" value="incoming"> 采用导入</label>
+          </div>`;
+      } else {
+        action = '<span class="hint">双方结论与备注一致，无需导入</span>';
+      }
+      return `
+        <div class="handoff-item ho-row-${row.outcome}">
+          <div class="ho-row-head"><span class="ho-tag ${meta.cls}">${meta.text}</span></div>
+          ${headQuote}${comment}
+          <div class="ho-sides">
+            <div class="ho-side ho-side-local"><b>本地</b>${reviewSideHtml(row.current)}</div>
+            <div class="ho-side ho-side-incoming"><b>交接包</b>${reviewSideHtml(row.incoming)}</div>
+          </div>
+          <div class="ho-action">${action}</div>
+        </div>`;
+    })
+    .join('') || '<p class="hint">交接包中没有任何记录。</p>';
+
+  // 任一冲突尚未选择时禁用确认按钮（不默认覆盖）
+  const updateConfirm = () => {
+    const unresolved = items.filter((r) => r.outcome === 'conflict').some((r) => {
+      const picked = document.querySelector(`input[name="ho-${r.annotationId}"]:checked`);
+      return !picked;
+    });
+    $('btnHandoffConfirm').disabled = unresolved || counts.importable + counts.conflict === 0;
+    $('btnHandoffConfirm').title = unresolved ? '存在未选择的冲突项，请逐条选择保留本地或采用导入' : '';
+  };
+  $('handoffItems').querySelectorAll('[data-conflict-choice]').forEach((el) =>
+    el.addEventListener('change', updateConfirm));
+  updateConfirm();
+}
+
+function openHandoffModal() {
+  $('handoffModal').classList.remove('hidden');
+  renderHandoffPreview();
+}
+
+function closeHandoffModal() {
+  state.handoff = null;
+  const modal = $('handoffModal');
+  if (modal) modal.classList.add('hidden');
+  const file = $('handoffFile');
+  if (file) file.value = '';
+}
+
+async function exportHandoffFile() {
+  if (!state.doc) return;
+  try {
+    const pkg = await api('GET', `/api/documents/${state.doc.id}/reviews/export`);
+    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeTitle = (state.doc.title || 'document').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40);
+    a.href = url;
+    a.download = `review-handoff_${safeTitle}_${state.doc.id}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast(pkg.count ? `已导出 ${pkg.count} 条有效签收` : '当前没有有效签收可导出');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function importHandoffFile(file) {
+  try {
+    const text = await file.text();
+    let pkg;
+    try {
+      pkg = JSON.parse(text);
+    } catch {
+      throw new Error('文件不是有效的 JSON');
+    }
+    const preview = await api('POST', `/api/documents/${state.doc.id}/reviews/import-preview`, pkg);
+    state.handoff = { pkg, preview };
+    openHandoffModal();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function confirmHandoff() {
+  if (!state.handoff) return;
+  const { pkg, preview } = state.handoff;
+  const resolutions = {};
+  for (const row of preview.items) {
+    if (row.outcome === 'conflict') {
+      const picked = document.querySelector(`input[name="ho-${row.annotationId}"]:checked`);
+      if (!picked) {
+        alert('存在未选择的冲突项，请逐条选择「保留本地」或「采用导入」');
+        return;
+      }
+      resolutions[row.annotationId] = picked.value;
+    } else if (row.outcome === 'importable') {
+      const box = document.querySelector(`[data-handoff-pick="${row.annotationId}"]`);
+      if (!box || !box.checked) resolutions[row.annotationId] = 'local';
+    }
+  }
+  try {
+    const result = await api(
+      'POST',
+      `/api/documents/${state.doc.id}/reviews/import-commit`,
+      { pkg, fingerprint: preview.fingerprint, resolutions }
+    );
+    state.doc = result.doc;
+    closeHandoffModal();
+    renderResults();
+    refreshDocList(state.doc.id); // 复核卡片与汇总数量同步刷新
+    saved();
+    toast(`导入完成：写入 ${result.applied} 条，跳过 ${result.skipped} 条`);
+  } catch (e) {
+    if (e.status === 409) {
+      // 期间文稿已变化：整批拒绝，自动按最新文稿重新预览，要求再次确认
+      alert(e.message);
+      try {
+        const fresh = await api('POST', `/api/documents/${state.doc.id}/reviews/import-preview`, pkg);
+        state.handoff = { pkg, preview: fresh };
+        renderHandoffPreview();
+      } catch (e2) {
+        alert(e2.message);
+      }
+    } else {
+      alert(e.message);
+    }
+  }
+}
+
 // ---------- 事件绑定 ----------
 
 $('btnNewDoc').addEventListener('click', async () => {
@@ -640,6 +841,21 @@ $('newView').addEventListener('mouseup', () => {
 $('btnCancelManual').addEventListener('click', () => {
   state.manualFor = null;
   $('manualBanner').classList.add('hidden');
+});
+
+// 复核结论离线交接
+$('btnHandoffExport').addEventListener('click', exportHandoffFile);
+$('btnHandoffImport').addEventListener('click', () => $('handoffFile').click());
+$('handoffFile').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // 允许重复选择同一文件
+  if (file) await importHandoffFile(file);
+});
+$('btnHandoffConfirm').addEventListener('click', confirmHandoff);
+$('btnHandoffCancel').addEventListener('click', closeHandoffModal);
+$('btnHandoffClose').addEventListener('click', closeHandoffModal);
+$('handoffModal').addEventListener('click', (e) => {
+  if (e.target === $('handoffModal')) closeHandoffModal(); // 点击遮罩关闭
 });
 
 // ---------- 启动 ----------

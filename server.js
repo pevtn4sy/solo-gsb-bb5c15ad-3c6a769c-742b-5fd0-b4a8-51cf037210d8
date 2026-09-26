@@ -13,6 +13,12 @@ const {
   pruneInvalidReviews,
   reviewCounts,
 } = require('./lib/review');
+const {
+  exportHandoff,
+  parseHandoff,
+  previewHandoff,
+  commitHandoff,
+} = require('./lib/handoff');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -295,6 +301,50 @@ app.put('/api/documents/:id/annotations/:aid/review', (req, res) => {
   };
   saveDoc(doc);
   res.json(docJson(doc));
+});
+
+// ---------- 复核结论离线交接 ----------
+
+// 导出：仅含当前有效签收的 JSON 交接包（文稿 ID、批注 ID、结论、备注、签收时间及绑定值）
+app.get('/api/documents/:id/reviews/export', (req, res) => {
+  const doc = loadDoc(req.params.id);
+  if (!doc) return notFound(res);
+  res.json(exportHandoff(doc));
+});
+
+// 导入预览：逐条核对，绝不写盘。缺失批注 / 绑定与当前新稿、批注及位置不符 → 跳过；
+// 目标无有效结论 → 可导入；双方结论或备注不同 → 冲突，交用户逐条选择。
+app.post('/api/documents/:id/reviews/import-preview', (req, res) => {
+  const doc = loadDoc(req.params.id);
+  if (!doc) return notFound(res);
+  const { error, pkg } = parseHandoff(req.body, doc.id);
+  if (error) return res.status(400).json({ error });
+  res.json(previewHandoff(doc, pkg));
+});
+
+// 确认导入：重新核对预览所依据的文稿内容指纹，期间文稿变化则整批拒绝（409）；
+// 通过后一次写入，复核卡片与汇总数量随响应同步刷新。
+app.post('/api/documents/:id/reviews/import-commit', (req, res) => {
+  const doc = loadDoc(req.params.id);
+  if (!doc) return notFound(res);
+  const { error, pkg } = parseHandoff(req.body && req.body.pkg, doc.id);
+  if (error) return res.status(400).json({ error });
+  const fingerprint = req.body && req.body.fingerprint;
+  const resolutions = req.body && req.body.resolutions;
+  if (typeof fingerprint !== 'string') {
+    return res.status(400).json({ error: '缺少预览指纹，请先预览再确认' });
+  }
+  if (resolutions != null && (typeof resolutions !== 'object' || Array.isArray(resolutions))) {
+    return res.status(400).json({ error: '冲突选择格式不正确' });
+  }
+  try {
+    const result = commitHandoff(doc, pkg, fingerprint, resolutions || {});
+    saveDoc(doc);
+    res.json({ doc: docJson(doc), applied: result.applied, skipped: result.skipped });
+  } catch (e) {
+    if (e.code === 'stale') return res.status(409).json({ error: e.message });
+    throw e;
+  }
 });
 
 app.listen(PORT, () => {

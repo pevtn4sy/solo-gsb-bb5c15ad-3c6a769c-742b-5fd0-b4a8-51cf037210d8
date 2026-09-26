@@ -303,4 +303,106 @@ button.btn-changes:hover { background: #d46b08; }
   z-index: 100;
 }
 
+/* ---------- 复核结论离线交接 ---------- */
+
+.handoff-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+.handoff-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+}
+.handoff-dialog {
+  background: #fff;
+  border-radius: 10px;
+  width: 860px;
+  max-width: 100%;
+  padding: 16px 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+.handoff-head { display: flex; align-items: center; justify-content: space-between; }
+.handoff-head h3 { margin: 0; font-size: 15px; }
+.handoff-info { margin: 8px 0; }
+.handoff-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.ho-tag {
+  display: inline-block;
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 1px 10px;
+  border: 1px solid #d1d5da;
+  background: #f6f8fa;
+}
+.ho-tag.ho-importable { background: #f6ffed; color: #237804; border-color: #b7eb8f; }
+.ho-tag.ho-conflict { background: #fff1f0; color: #cf1322; border-color: #ffa39e; }
+.ho-tag.ho-identical { background: #e6f4ff; color: #0958d9; border-color: #91caff; }
+.ho-tag.ho-skipped { background: #f5f5f5; color: #595959; border-color: #d9d9d9; }
+.ho-error { color: #cf1322; }
+
+.handoff-items { max-height: 55vh; overflow-y: auto; }
+.handoff-item {
+  border: 1px solid #e1e4e8;
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.handoff-item.ho-row-importable { border-left-color: #52c41a; }
+.handoff-item.ho-row-conflict { border-left-color: #cf1322; background: #fffafa; }
+.handoff-item.ho-row-identical { border-left-color: #1677ff; }
+.handoff-item.ho-row-skipped { border-left-color: #bfbfbf; background: #fafafa; }
+.ho-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.handoff-item .quote {
+  font-size: 13px;
+  background: #f6f8fa;
+  border-left: 3px solid #d1d5da;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+.handoff-item .comment { font-size: 13px; margin-bottom: 6px; }
+.handoff-note { font-size: 12px; margin-top: 2px; word-break: break-word; }
+
+.ho-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0;
+}
+@media (max-width: 700px) {
+  .ho-sides { grid-template-columns: 1fr; }
+}
+.ho-side {
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.ho-side b { display: block; margin-bottom: 4px; }
+.ho-side-local { background: #f6ffed; }
+.ho-side-incoming { background: #f0f6ff; }
+
+.ho-action { margin-top: 4px; font-size: 13px; }
+.ho-conflict-choices { display: flex; gap: 16px; flex-wrap: wrap; }
+.ho-conflict-choices label, .ho-choice { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+
+.handoff-foot { margin-top: 10px; align-items: flex-start; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .hidden { display: none !important; }

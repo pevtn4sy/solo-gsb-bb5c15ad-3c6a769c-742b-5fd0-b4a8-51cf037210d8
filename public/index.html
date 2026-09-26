@@ -68,6 +68,13 @@
         </span>
       </h2>
       <div id="reviewSummary" class="review-summary"></div>
+      <div class="handoff-bar">
+        <b>复核结论离线交接：</b>
+        <button id="btnHandoffExport" class="ghost small">⬇ 导出有效签收（JSON）</button>
+        <button id="btnHandoffImport" class="ghost small">⬆ 导入交接包…</button>
+        <input id="handoffFile" type="file" accept=".json,application/json" class="hidden">
+        <span class="hint">导出仅含当前有效签收；导入同一文稿的交接包时先逐条预览，冲突须人工选择，不会默认覆盖</span>
+      </div>
       <div id="manualBanner" class="manual-banner hidden">
         正在为批注「<span id="manualQuote"></span>」手动定位：请在左侧新稿中框选对应文字。
         <button id="btnCancelManual" class="ghost">取消</button>
@@ -82,6 +89,23 @@
       </div>
     </section>
   </main>
+
+  <div id="handoffModal" class="handoff-modal hidden">
+    <div class="handoff-dialog">
+      <div class="handoff-head">
+        <h3>复核结论导入预览</h3>
+        <button id="btnHandoffClose" class="ghost small">关闭</button>
+      </div>
+      <div id="handoffInfo" class="handoff-info hint"></div>
+      <div id="handoffStats" class="handoff-stats"></div>
+      <div id="handoffItems" class="handoff-items"></div>
+      <div class="handoff-foot row">
+        <button id="btnHandoffConfirm">确认导入所选</button>
+        <button id="btnHandoffCancel" class="ghost">取消</button>
+        <span class="hint">确认时会重新核对文稿内容指纹；若期间文稿变化，整批拒绝并要求重新预览。冲突项不选择不导入，绝不默认覆盖。</span>
+      </div>
+    </div>
+  </div>
 
   <div id="toast" class="toast hidden"></div>
   <script src="app.js"></script>
