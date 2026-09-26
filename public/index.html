@@ -68,6 +68,12 @@
         </span>
       </h2>
       <div id="reviewSummary" class="review-summary"></div>
+      <div class="handoff-bar">
+        <button id="btnExportReviews" class="ghost small">导出复核结论</button>
+        <button id="btnImportReviews" class="ghost small">导入复核结论</button>
+        <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+        <span class="hint">离线交接：导出仅含当前有效签收；导入先逐条预览，冲突人工选择，确认时重新核对文稿指纹</span>
+      </div>
       <div id="manualBanner" class="manual-banner hidden">
         正在为批注「<span id="manualQuote"></span>」手动定位：请在左侧新稿中框选对应文字。
         <button id="btnCancelManual" class="ghost">取消</button>
@@ -84,6 +90,20 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+
+  <div id="importModal" class="modal hidden">
+    <div class="modal-box">
+      <h3>导入复核结论
+        <span class="hint">逐条预览；确认时重新核对文稿内容指纹，若期间文稿变化则整批拒绝</span>
+      </h3>
+      <div id="importSummary" class="import-summary"></div>
+      <div id="importList"></div>
+      <div class="row modal-ops">
+        <button id="btnConfirmImport">确认导入</button>
+        <button id="btnCancelImport" class="ghost">取消</button>
+      </div>
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

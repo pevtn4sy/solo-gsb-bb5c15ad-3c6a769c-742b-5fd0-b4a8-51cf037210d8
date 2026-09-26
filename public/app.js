@@ -6,6 +6,7 @@ const state = {
   pendingSel: null, // 旧稿中待添加批注的选区 {start, end}
   manualFor: null, // 正在手动定位的批注 id
   reviewEditing: new Set(), // 正在编辑复核结论的批注 id
+  importPreview: null, // 待确认的导入预览 {pkg, fingerprint, items, counts}
 };
 
 // ---------- 工具 ----------
@@ -124,6 +125,7 @@ async function loadDoc(id) {
   state.pendingSel = null;
   state.manualFor = null;
   state.reviewEditing = new Set();
+  closeImportModal();
   $('emptyState').classList.add('hidden');
   $('workspace').classList.remove('hidden');
   $('annotForm').classList.add('hidden');
@@ -378,6 +380,159 @@ async function submitReview(aid, decision, note) {
     toast(decision === 'approved' ? '已标记为「已核准」' : '已标记为「需调整」');
   } catch (e) {
     alert(e.message);
+  }
+}
+
+// ---------- 复核结论离线交接 ----------
+
+const IMPORT_STATUS_LABEL = { skip: '跳过', same: '一致', import: '可导入', conflict: '冲突' };
+const IMPORT_REASON_LABEL = {
+  missing_annotation: '当前文稿中不存在该批注',
+  binding_mismatch: '绑定与当前新稿、批注或位置不符',
+  invalid_record: '记录字段残缺或非法',
+  duplicate: '交接包中的重复记录',
+};
+
+/** 一行展示一条结论：结论｜备注｜签收时间 */
+function reviewLine(r) {
+  return `${REVIEW_LABEL[r.decision] || r.decision}${r.note ? `｜备注：${r.note}` : ''}｜签收于 ${fmtTime(r.at)}`;
+}
+
+/** 导出当前有效复核签收为 JSON 文件 */
+async function exportReviews() {
+  if (!state.doc) return;
+  try {
+    const pkg = await api('GET', `/api/documents/${state.doc.id}/reviews/export`);
+    if (!pkg.reviews || !pkg.reviews.length) {
+      toast('当前没有有效的复核结论可导出');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `复核结论-${state.doc.title || state.doc.id}-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast(`已导出 ${pkg.reviews.length} 条有效复核结论`);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function closeImportModal() {
+  $('importModal').classList.add('hidden');
+  state.importPreview = null;
+}
+
+/** 选择交接包后请求预览：逐条分类，不写盘 */
+async function onImportFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file || !state.doc) return;
+  let pkg;
+  try {
+    pkg = JSON.parse(await file.text());
+  } catch {
+    alert('文件不是有效的 JSON，请选择导出的复核结论交接包');
+    return;
+  }
+  try {
+    const preview = await api('POST', `/api/documents/${state.doc.id}/reviews/import/preview`, {
+      package: pkg,
+    });
+    state.importPreview = {
+      pkg,
+      fingerprint: preview.fingerprint,
+      items: preview.items,
+      counts: preview.counts,
+    };
+    renderImportModal();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function renderImportModal() {
+  const p = state.importPreview;
+  if (!p) return;
+  $('importSummary').innerHTML =
+    `交接包导出于 ${p.pkg.exportedAt ? fmtTime(p.pkg.exportedAt) : '未知时间'}，共 ${p.items.length} 条记录：` +
+    `<b class="rv-text-approved">可导入 ${p.counts.import}</b>　` +
+    `<b class="rv-text-changes">冲突 ${p.counts.conflict}</b>　` +
+    `一致 ${p.counts.same}　跳过 ${p.counts.skip}` +
+    (p.counts.conflict
+      ? '<div class="hint">冲突项请逐条选择，默认「保留本地」，不选择不会覆盖本地结论。</div>'
+      : '');
+  $('importList').innerHTML = p.items
+    .map((it) => {
+      const head =
+        `<span class="badge badge-imp-${it.status}">${IMPORT_STATUS_LABEL[it.status]}</span>` +
+        (it.comment ? `<span class="imp-comment">${escapeHtml(it.comment)}</span>` : '') +
+        (it.quote ? `<span class="imp-quote">${escapeHtml(it.quote)}</span>` : '');
+      if (it.status === 'skip') {
+        return `<div class="import-item imp-skip">${head}<div class="hint">跳过：${
+          IMPORT_REASON_LABEL[it.reason] || it.reason
+        }</div></div>`;
+      }
+      if (it.status === 'same') {
+        return `<div class="import-item">${head}<div class="hint">与当前有效结论一致，无需导入（${escapeHtml(
+          reviewLine(it.local)
+        )}）</div></div>`;
+      }
+      if (it.status === 'import') {
+        return `<div class="import-item imp-import">${head}<div class="imp-line">导入：${escapeHtml(
+          reviewLine(it.imported)
+        )}</div></div>`;
+      }
+      // 冲突：逐条选择保留本地或采用导入，默认保留本地
+      const name = `res-${it.annotationId}`;
+      return `
+        <div class="import-item imp-conflict">
+          ${head}
+          <label class="imp-choice">
+            <input type="radio" name="${name}" value="keep" checked>
+            保留本地：${escapeHtml(reviewLine(it.local))}
+          </label>
+          <label class="imp-choice">
+            <input type="radio" name="${name}" value="import">
+            采用导入：${escapeHtml(reviewLine(it.imported))}
+          </label>
+        </div>`;
+    })
+    .join('') || '<p class="hint">交接包中没有记录。</p>';
+  $('importModal').classList.remove('hidden');
+}
+
+/** 确认导入：带上预览时的指纹；指纹不符整批拒绝，需重新预览 */
+async function confirmImport() {
+  const p = state.importPreview;
+  if (!p || !state.doc) return;
+  const resolutions = {};
+  for (const it of p.items) {
+    if (it.status !== 'conflict') continue;
+    const sel = document.querySelector(`input[name="res-${it.annotationId}"]:checked`);
+    resolutions[it.annotationId] = sel && sel.value === 'import' ? 'import' : 'keep'; // 缺省保留本地
+  }
+  try {
+    const data = await api('POST', `/api/documents/${state.doc.id}/reviews/import/confirm`, {
+      fingerprint: p.fingerprint,
+      package: p.pkg,
+      resolutions,
+    });
+    state.doc = data.doc;
+    closeImportModal();
+    renderResults(); // 复核卡片与汇总数量同步刷新
+    refreshDocList(state.doc.id);
+    saved();
+    toast(`导入完成：写入 ${data.applied} 条，保留本地 ${data.kept} 条，跳过 ${data.skipped} 条`);
+  } catch (e) {
+    closeImportModal();
+    alert(e.message); // 指纹不符：整批已拒绝，需重新预览
+    try {
+      await loadDoc(state.doc.id); // 同步他处对文稿的改动
+    } catch {
+      /* 忽略 */
+    }
   }
 }
 
@@ -641,6 +796,17 @@ $('btnCancelManual').addEventListener('click', () => {
   state.manualFor = null;
   $('manualBanner').classList.add('hidden');
 });
+
+// 复核结论离线交接
+$('btnExportReviews').addEventListener('click', exportReviews);
+$('btnImportReviews').addEventListener('click', () => {
+  if (!state.doc) return;
+  $('importFile').value = '';
+  $('importFile').click();
+});
+$('importFile').addEventListener('change', onImportFile);
+$('btnConfirmImport').addEventListener('click', confirmImport);
+$('btnCancelImport').addEventListener('click', closeImportModal);
 
 // ---------- 启动 ----------
 

@@ -13,6 +13,13 @@ const {
   pruneInvalidReviews,
   reviewCounts,
 } = require('./lib/review');
+const {
+  exportReviews,
+  validatePackage,
+  docFingerprint,
+  previewImport,
+  applyImport,
+} = require('./lib/handoff');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -295,6 +302,45 @@ app.put('/api/documents/:id/annotations/:aid/review', (req, res) => {
   };
   saveDoc(doc);
   res.json(docJson(doc));
+});
+
+// ---------- 复核结论离线交接 ----------
+
+// 导出：仅打包当前有效的复核签收（文稿/批注 ID、结论、备注、签收时间、绑定值）
+app.get('/api/documents/:id/reviews/export', (req, res) => {
+  const doc = loadDoc(req.params.id);
+  if (!doc) return notFound(res);
+  res.json(exportReviews(doc));
+});
+
+// 导入预览：逐条分类（跳过/一致/可导入/冲突）并返回文稿内容指纹，不写盘
+app.post('/api/documents/:id/reviews/import/preview', (req, res) => {
+  const doc = loadDoc(req.params.id);
+  if (!doc) return notFound(res);
+  const pkg = req.body && req.body.package;
+  const err = validatePackage(pkg, doc.id);
+  if (err) return res.status(400).json({ error: err });
+  const { items, counts } = previewImport(doc, pkg);
+  res.json({ fingerprint: docFingerprint(doc), items, counts });
+});
+
+// 确认导入：重新核对预览所依据的文稿内容指纹，不符则整批拒绝（需重新预览）；
+// 相符才按用户逐条选择一次写入，冲突项缺省保留本地、不默认覆盖
+app.post('/api/documents/:id/reviews/import/confirm', (req, res) => {
+  const doc = loadDoc(req.params.id);
+  if (!doc) return notFound(res);
+  const pkg = req.body && req.body.package;
+  const err = validatePackage(pkg, doc.id);
+  if (err) return res.status(400).json({ error: err });
+  const fingerprint = req.body && req.body.fingerprint;
+  if (!fingerprint || fingerprint !== docFingerprint(doc)) {
+    return res
+      .status(409)
+      .json({ error: '预览后文稿内容已变化，本批导入已整批拒绝，请重新预览' });
+  }
+  const result = applyImport(doc, pkg, req.body.resolutions);
+  saveDoc(doc); // 一次写入全部选定结论
+  res.json({ doc: docJson(doc), ...result });
 });
 
 app.listen(PORT, () => {

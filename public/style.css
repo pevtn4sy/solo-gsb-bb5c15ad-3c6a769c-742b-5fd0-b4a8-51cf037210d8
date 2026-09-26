@@ -303,4 +303,73 @@ button.btn-changes:hover { background: #d46b08; }
   z-index: 100;
 }
 
+/* ---------- 复核结论离线交接 ---------- */
+
+.handoff-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  width: min(760px, 94vw);
+  max-height: 84vh;
+  overflow-y: auto;
+}
+.modal-box h3 { font-size: 15px; margin: 0 0 10px; }
+.modal-ops { justify-content: flex-end; margin-top: 12px; }
+
+.import-summary { font-size: 13px; margin-bottom: 10px; }
+.import-item {
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.import-item.imp-skip { background: #fafbfc; color: #6a737d; }
+.import-item.imp-import { background: #f6ffed; border-color: #b7eb8f; }
+.import-item.imp-conflict { background: #fff7e6; border-color: #ffd591; }
+.imp-comment { font-weight: 600; margin-left: 2px; }
+.imp-quote {
+  display: block;
+  color: #6a737d;
+  font-size: 12px;
+  margin-top: 2px;
+  word-break: break-word;
+}
+.imp-line { margin-top: 4px; }
+.imp-choice {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px dashed #d1d5da;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.imp-choice:hover { background: rgba(255, 255, 255, 0.6); }
+.imp-choice input { margin-right: 6px; }
+
+.badge-imp-skip { background: #f5f5f5; color: #595959; border: 1px solid #d9d9d9; }
+.badge-imp-same { background: #e6f4ff; color: #0958d9; border: 1px solid #91caff; }
+.badge-imp-import { background: #f6ffed; color: #237804; border: 1px solid #b7eb8f; }
+.badge-imp-conflict { background: #fff7e6; color: #ad4e00; border: 1px solid #ffd591; }
+
 .hidden { display: none !important; }
